@@ -33,6 +33,8 @@ Given that, we have divided the procedure in six different steps (with a seven a
 
 ### Step 1: Load packages, clean your data (if applicable)
 
+```{r}
+
 library(stringi)
 library(dplyr)
 library(tidyverse)
@@ -68,6 +70,7 @@ data$last_name <- tolower(data$last_name)
 
 write.csv(data, "cleandata.csv", row.names=FALSE)
 
+```
 
 ### Step 2: Assign gender to Slavic names using Wikidata names
 
