@@ -1,0 +1,390 @@
+---
+title: "Gender assignment to names using Wikidata + 2nd World Gender Name Dictionary "
+output:
+  pdf_document: 
+    keep_tex: true
+    toc: true
+    toc_depth: 3
+    fig_caption: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  message = FALSE,
+  warning = FALSE
+)
+```
+
+## Introduction 
+
+Here we will explain how to use the list of Wikidata names + World Gender Name Dictionary (https://github.com/IES-platform/r4r_gender/blob/main/wgnd/README.md) (WGND) second dictionary to assign gender to names. 
+
+Note that we only look at the probability that a certain name is assigned to a certain gender in a specific country. That is, we are not identifying the gender of names but looking at the probability of a gender-name combination. 
+
+It is also important to take into account the binary view of gender and names that this gender assignation approach has, since only Men/Women/Unknonwn options are possible. So far, algorithms have not been able to solve this issue, that hinders and hides non-binary realities.
+
+Given that, we have divided the procedure in six different steps (with a seven and eight optional step):
+1. Load packages, clean your data
+2. Assign gender to Slavic names* using Wikidata names
+3. Assign gender to non-Slavic names* using Wikidata names
+4. Join Slavic and non-Slavic names, clean data
+5. With those names that remained unknown, use a second list of Wikidata names
+6. With those names that remaine unknown, use the WGND second dictionary based on language-gender-name information. 
+7. Create graph to show results (Optional)
+8. Create world map to show global distribution of results (Optional)
+
+
+*The reason for this division lays in the fact that Slavic names may contain gender information on last names, whereas non-Slavic names do not. 
+
+### Step 1: Load packages, clean your data (if applicable)
+
+```{r}
+
+library(stringi)
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+
+#Upload your data
+#Your data should have at least four colums: first_name, last_name, country_code (Alpha-2) & unique_id
+
+data <- read.csv("your_list.csv")
+
+#Eliminate rows with a NULL country_code 
+
+data <- subset(data, country_code != "NULL")
+
+#Eliminate all "-"
+
+data$first_name <- gsub("-", " ", data$first_name)
+
+#Romanize names
+
+data <- data %>% 
+  mutate(first_name = stri_trans_general(first_name, "Latin-ASCII"))
+
+#Separate compound names 
+
+data <- data %>% 
+  separate(first_name, into=c("first_name", "middle_name"), sep = " ", extra = "merge", fill = "right")
+
+#Put names in lower case 
+
+data$first_name <- tolower(data$first_name)
+data$last_name <- tolower(data$last_name)
+
+write.csv(data, "cleandata.csv", row.names=FALSE)
+
+```
+
+### Step 2: Assign gender to Slavic names using Wikidata names
+
+```{r}
+
+#Upload Wikidata name lists (WDNAMESslav & WDNAMESrest) 
+
+WDNAMESslav <- read.csv("WDNAMESslav.csv")
+WDNAMESrest <- read.csv("WDNAMESrest.csv")
+
+#Subset by Slavic names on your data
+
+dataslav <- subset(data, country_code %in% c("BY", "BA", "BG", "HR", "CZ", "ME", "MK", "PL", "RU", "RS", "SK", "SI", "UA"))
+
+#Join Wikidata Slavic names with your data 
+
+dataslav <- left_join(x = dataslav, y = WDNAMESslav, by = c("first_name", "country_code"), suffix = c("", "_wdnames"))
+
+get_gender <- function(last_name) {
+  if (grepl("(ov|en|in|eb|yi|yj|ky|kii|kij|ob)$", last_name, ignore.case = TRUE)) {
+    return("Man")
+  } else if (grepl("(ova|eva|ina|oba|aya|aia|ina|iha)$", last_name, ignore.case = TRUE)) {
+    return("Woman")
+  } else {
+    return("Unknown")
+  }
+}
+
+dataslav$gender_last_name <- sapply(dataslav$last_name, get_gender)
+
+frequency_table <- table(dataslav$Gender, dataslav$gender_last_name)
+
+dataslav$Combo <- paste(dataslav$Gender, dataslav$gender_last_name, sep = "_")
+
+frequency_table2 <- table(dataslav$Combo)
+
+dataslav <- dataslav %>%
+  mutate(GenderComb = case_when(
+    Combo == "Man_Man" ~ "Man",
+    Combo == "Woman_Woman" ~ "Woman",
+    Combo == "Woman_Man" ~ "Unknown",
+    Combo == "Man_Woman" ~ "Unknown",
+    Combo == "Woman_Unknown" ~ "Woman",
+    Combo == "Man_Unknown" ~ "Man",
+    Combo == "NA_Man" ~ "Man",
+    Combo == "NA_Woman" ~ "Woman",
+    Combo == "NA_Unknown" ~ "Unknown",
+    TRUE ~ NA_character_  
+  ))
+
+#Eliminate unnecessary columns and rename (the extra columns to eliminate will depend on your data)
+
+dataslav <- dataslav[,-c(7:13)]
+colnames(dataslav)[7] <- "Gender"
+
+#Check gender on Slavic names using first_name
+
+dataslavU <- subset(dataslav, !(Gender %in% c("Man", "Woman")))
+dataslavFM <- subset(dataslav, (Gender %in% c("Man", "Woman")))
+
+dataslav <- left_join(x = dataslavU, y = WDNAMESrest, by = c("first_name", "country_code"), multiple = "all")
+
+#Eliminate unnecessary columns and rename, so all results have the same column names and order for matching (the extra columns to eliminate will depend on your data)
+
+dataslav <- dataslav[, -c(7:9,11,12)]
+colnames(dataslav)[7] <- "Gender"
+dataslav <- dataslav %>%
+  mutate(Gender = ifelse(is.na(Gender), "Unknown", Gender))
+
+dataslav <- rbind(dataslavFM, dataslav)
+
+```
+
+
+### Step 3: Assign gender to non-Slavic names* using Wikidata names
+
+```{r}
+
+#Select those countries that are not Slavic
+
+excluded_codes <- c("BY", "BA", "BG", "HR", "CZ", "ME", "MK", "PL", "RU", "RS", "SK", "SI", "UA")
+
+datarest <- subset(data, !country_code %in% excluded_codes)
+
+#Add gender to those names
+
+datarest <- left_join(x = datarest, y = WDNAMESrest, by = c("first_name", "country_code"), multiple = "all")
+datarest <- datarest[,-c(7,8,10,11)]
+datarest <- datarest %>%
+  mutate(Gender = ifelse(is.na(Gender), "Unknown", Gender))
+
+```
+
+### Step 4: Join Slavic and non-Slavic names, clean data
+
+```{r}
+
+#Join them (be sure they have the same number of columns, in the same order and with the same names)
+
+data_gender <- rbind(datarest, dataslav)
+
+#Eliminate initials and "X." (Now that we have checked for Slavic names, it will not be possible to assign gender to intials whose gender has remained Unknown until now)
+
+initials_rows <- grepl("^\\p{L}+\\.$", data_gender$first_name, perl = TRUE)
+
+data_gender <- data_gender[!initials_rows, ]
+
+data_gender$first_name <- gsub("[A-Za-z]\\..*$", "", data_gender$first_name)
+
+data_gender$first_name <- trimws(data_gender$first_name, "right")
+
+#Eliminate non-roman rows
+
+non_roman_rows <- grepl("[^A-Za-z ]", data_gender$first_name)
+
+non_roman <- print(data_gender[non_roman_rows, ])
+
+data_gender <- anti_join(data_gender, non_roman, by = c("unique_id", "first_name"))
+
+#Eliminate first_name = NA
+
+missing_values <- c("", "NA", "NULL") 
+
+suppressWarnings({
+data_gender$first_name[data_gender$first_name %in% missing_values] <- NA
+})
+
+suppressWarnings({
+data_gender <- data_gender[complete.cases(data_gender$first_name), ]
+})
+
+#Save to csv (as a safety measure, to avoid unpleasant surprises)
+
+write.csv(data_gender, "data_gender.csv", row.names=FALSE)
+
+```
+
+### Step 5: With those names that remained unknown, use a second list of Wikidata names (WDNAMES2)
+
+WDNAMES2 is created following the logic that if a name is usually assigned one gender in 10 or more countries, that name is most likely related to that name in countries in which that name was not listed. Therefore, it does not use country_code. 
+
+```{r}
+
+#Upload name lists WDNAMES 
+
+WDNAMES2 <- read.csv("WDNAMES2.csv")
+
+#Select your data names that whose gender has remained "Unknown" until now
+
+data_unknown <- subset(data_gender, !(Gender %in% c("Man", "Woman")))
+
+#Join your "Unknowns" with WDNAMES2
+
+data_unknown_gender <- left_join(x = data_unknown, y = WDNAMES2, by = c("first_name"), multiple = "all")
+
+#Eliminate unnecessary colums (this will depend on your data) and join with previous data whose gender was identified 
+
+data_unknown_gender <- data_unknown_gender[, -c(7,9)]
+colnames(data_unknown_gender)[7] <- "Gender"
+
+data_known_gender <- subset(data_gender, Gender!= "Unknown")
+
+data_gender <- rbind(data_known_gender, data_unknown_gender)
+
+#Save to csv (as a safety measure, to avoid unpleasant surprises)
+
+write.csv(data_gender, "data_gender.csv", row.names=FALSE)
+```
+
+### Step 6: With those names that remaine unknown, use the WGND second dictionary based on language-gender-name information.
+
+The logic behind this list is that when a name is assigned to the same gender in more than 50% of the languages spoken in that country, that gender will be assigned to that name. 
+
+
+```{r}
+
+#Load packages & datasets
+
+library(rlang)
+wgnd_2_0_code_langcode <- read.csv("wgnd_2_0_code_langcode.csv")
+wgnd_2_0_name_gender_langcode <- read.csv("wgnd_2_0_name_gender_langcode.csv")
+
+#Select your data names that whose gender has remained "Unknown" until now
+
+data_language <- data_gender %>%
+  filter(!Gender %in% c("Man", "Woman"))
+
+#Join with the WGND database
+
+suppressWarnings({
+  data_language <- left_join(data_language, wgnd_2_0_code_langcode, by = "country_code", keep = TRUE)
+})
+
+#Sssign gender using language code 
+
+suppressWarnings({
+data_language <- left_join(data_language, wgnd_2_0_name_gender_langcode, by = c("first_name", "langcode"))
+})
+
+data_language$gender[is.na(data_language$gender)] <- "Unknown"
+
+result <- table(data_language$unique_id, data_language$gender)
+result_df <- as.data.frame.matrix(result)
+result_df$unique_id <- row.names(result_df)
+
+result_df$GenderLan = apply(result_df[, -ncol(result_df)], 1, function(row) {
+  total = sum(row)
+  if (row["Man"] > total * 0.5) {
+    return("Man")
+  } else if (row["Woman"] > total * 0.5) {
+    return("Woman")
+  } else if (row["Unknown"] > total * 0.5) {
+    return("Unknown")
+  } else {
+    return(NA)
+  }
+})
+
+data_language_result <- result_df[, -c(1:3)]
+
+data_language$unique_id <- as.character(data_language$unique_id)
+
+data_language <- left_join(data_language_result, data_language, by = "unique_id", multiple="any")
+
+data_gender_known <- data_gender %>%
+  filter(Gender %in% c("Man", "Woman"))
+
+#Eliminate unnecessary colums (this will depend on your data) and join with previous data whose gender was identified 
+
+data_language <- data_language[,-c(8:11)]
+data_language <- data_language[,c(1,3,4,5,6,7,2)]
+colnames(data_language)[7] = "Gender"
+colnames(data_language)[5] = "country_code"
+
+#Join with previous data whose gender was identified
+
+data_gender_final <- rbind(data_gender_known, data_language)
+
+data_gender_final <- data_gender_final %>%
+  mutate(Gender = if_else(is.na(Gender), "Unknown", Gender))
+
+#Save to csv (it is the final document!)
+
+write.csv(data_gender_final, "data_gender_final.csv", row.names=FALSE)
+
+```
+### Step 7 (Optional): Create graph to show results 
+
+```{r}
+
+#Load packages
+
+library(ggplot2)
+library(scales)
+
+freq <- data_gender_final %>%
+  group_by(Gender) %>%
+  summarise(n = n()) %>%
+  mutate(freq = n / sum(n))
+
+x<- ggplot(freq, aes(x = Gender, y = n)) +
+  geom_bar(stat = "identity", fill = "mediumseagreen", alpha = 0.7) +
+  labs(x = "Gender estimation", y = "Number of assignations") +
+  theme_classic()+
+  scale_y_continuous(labels = comma) +
+  theme(
+    axis.text.x = element_text(margin = margin(b = 10)),  
+    axis.text.y = element_text(margin = margin(l = 10))   
+  )
+
+print(x)
+
+
+```
+
+### Step 8 (Optional): Create world map to show global distribution of results.
+
+```{r}
+
+library(rworldmap)
+
+filtered_data <- data_gender_final %>%
+  filter(Gender %in% c("Woman", "Man"))
+
+grouped_data <- filtered_data %>%
+  group_by(country_code) %>%
+  summarize(total_known = n())
+
+total_names <- data_gender_final %>%
+  group_by(country_code) %>%
+  summarize(total_names = n())
+
+merged_data <- merge(grouped_data, total_names, by = "country_code")
+
+result <- merged_data %>%
+  mutate(percentage = (total_known / total_names) * 100) %>%
+  select(country_code, percentage)
+
+p1 <- rworldmap::joinCountryData2Map(result,
+                         joinCode = "ISO2",
+                         nameJoinColumn = "country_code",
+                         verbose = TRUE)
+
+
+map <- rworldmap::mapCountryData(p1, nameColumnToPlot="percentage")
+
+```
+
+
+
+
