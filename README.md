@@ -26,3 +26,4 @@ names, whereas non-Slavic names do not.
 **Files needed for this step, [wgnd_2_0_code_langcode](https://dataverse.harvard.edu/file.xhtml?fileId=4750349&datasetVersionId=268165) and [wgnd_2_0_name_gender_langcode](https://dataverse.harvard.edu/file.xhtml?fileId=4750353&datasetVersionId=268165) can be found in the original World Gender Name Dictionary repository. 
 
 
+Warning: Depending on your data (given the number of columns, etc.), you may need to do small modifications to the code. Some notions of the workings of R are recommended. 
