@@ -133,25 +133,6 @@ dataslav <- dataslav[,-c(10,11)]
 dataslav <- dataslav[,c(1,2,3,4,5,6,7,10,8,9)]
 colnames(dataslav)[8] <- "Gender"
 
-#Check gender on Slavic names using first_name
-
-dataslavU <- subset(dataslav, !(Gender %in% c("Man", "Woman")))
-dataslavFM <- subset(dataslav, (Gender %in% c("Man", "Woman")))
-
-dataslav <- left_join(x = dataslavU, y = WDNAMESrest, by = c("first_name", "country_code"), multiple = "all")
-
-#Eliminate unnecessary columns and rename, so all results have the same column names and order for matching (the extra columns to eliminate will depend on your data)
-
-dataslav <- dataslav[, -c(8,11,12,14,15)]
-dataslav <- dataslav[,c(1,2,3,4,5,6,7,10,8,9)]
-colnames(dataslav)[6] <- "personLabel"
-colnames(dataslav)[7] <- "countryLabel"
-colnames(dataslav)[8] <- "Gender"
-colnames(dataslav)[9] <- "Perc"
-colnames(dataslav)[10] <- "NTimes"
-
-dataslav <- rbind(dataslavFM, dataslav)
-
 ```
 
 ### Step 3: Assign gender to non-Slavic names* using Wikidata names
