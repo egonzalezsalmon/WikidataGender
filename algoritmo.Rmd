@@ -252,7 +252,7 @@ suppressWarnings({
   data_language <- left_join(data_language, wgnd_2_0_code_langcode, by = "country_code", keep = TRUE)
 })
 
-#Sssign gender using language code 
+#Assign gender using language code 
 
 suppressWarnings({
 data_language <- left_join(data_language, wgnd_2_0_name_gender_langcode, by = c("first_name", "langcode"))
