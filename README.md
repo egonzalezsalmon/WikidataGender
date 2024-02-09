@@ -1,4 +1,4 @@
-# WikidataGender
+# WikiGenDex
 Gender assignment algorithm based on Wikidata + Second WGND Dictionary
 
 Here we will explain how to use the list of Wikidata names + [World Gender Name Dictionary](https://github.com/IES-platform/r4r_gender/blob/main/wgnd/README.md) (WGND) second dictionary to assign gender to names.
